@@ -11,14 +11,14 @@ app.use(express.json({ limit: '10mb' }));
 app.use(cors());
 
 // =====================
-// Health Check Route
+// Health Check (IMPORTANT)
 // =====================
 app.get('/', (req, res) => {
-  res.send('Salesforce Proxy is running 🚀');
+  res.status(200).send('Salesforce Proxy is running 🚀');
 });
 
 // =====================
-// MAIN PROXY ENDPOINT
+// PROXY ENDPOINT
 // =====================
 app.post('/proxy', async (req, res) => {
 
@@ -42,12 +42,12 @@ app.post('/proxy', async (req, res) => {
 
     if (!endpoint.startsWith('/services/')) {
       return res.status(400).json({
-        error: 'Invalid Salesforce endpoint format'
+        error: 'Invalid Salesforce endpoint'
       });
     }
 
     // =====================
-    // SAFE HEADERS PARSING
+    // HEADERS SAFE PARSE
     // =====================
     let parsedHeaders = {};
 
@@ -57,18 +57,15 @@ app.post('/proxy', async (req, res) => {
           typeof headers === 'string'
             ? JSON.parse(headers)
             : headers;
-      } catch (err) {
+      } catch (e) {
         return res.status(400).json({
           error: 'Invalid headers JSON',
-          message: err.message
+          message: e.message
         });
       }
     }
 
-    console.log('📤 Proxy Request:');
-    console.log('Instance:', instanceUrl);
-    console.log('Endpoint:', endpoint);
-    console.log('Method:', method);
+    console.log('📤 Proxy Request:', instanceUrl + endpoint);
 
     // =====================
     // CALL SALESFORCE
@@ -80,8 +77,6 @@ app.post('/proxy', async (req, res) => {
       data: body,
       timeout: 30000
     });
-
-    console.log('✅ Success:', response.status);
 
     return res.status(response.status).json(response.data);
 
@@ -107,10 +102,8 @@ app.post('/proxy', async (req, res) => {
 // =====================
 // START SERVER (RENDER SAFE)
 // =====================
+const PORT = process.env.PORT || 10000;
 
-// 🔥 CRITICAL FIX FOR RENDER
-const PORT = process.env.PORT;
-
-app.listen(PORT, '0.0.0.0', () => {
+app.listen(PORT, () => {
   console.log(`🚀 Proxy running on port ${PORT}`);
 });
