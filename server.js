@@ -4,51 +4,113 @@ const cors = require('cors');
 
 const app = express();
 
+// =====================
+// Middleware
+// =====================
 app.use(express.json({ limit: '10mb' }));
 app.use(cors());
 
-// 🎯 Target Salesforce (Litify) endpoint
-const TARGET_URL =
-  'https://reyeslaw.my.salesforce-sites.com/api/services/apexrest/litify_pm/api/v1/intake/create';
+// =====================
+// Optional Health Check
+// =====================
+app.get('/', (req, res) => {
+  res.send('Salesforce Proxy is running 🚀');
+});
 
-/**
- * Proxy Endpoint
- * Salesforce → Node → Reyes Salesforce
- */
+// =====================
+// MAIN PROXY ENDPOINT
+// =====================
 app.post('/proxy', async (req, res) => {
+
   try {
+    const {
+      instanceUrl,
+      endpoint,
+      method,
+      headers,
+      body
+    } = req.body;
 
-    console.log('📥 Incoming request:');
-    console.log(JSON.stringify(req.body, null, 2));
+    // =====================
+    // BASIC VALIDATION
+    // =====================
+    if (!instanceUrl || !endpoint || !method) {
+      return res.status(400).json({
+        error: 'Missing required fields: instanceUrl, endpoint, method'
+      });
+    }
 
-    // 🚀 Forward request directly to Reyes Salesforce
+    if (!endpoint.startsWith('/services/')) {
+      return res.status(400).json({
+        error: 'Invalid Salesforce endpoint format'
+      });
+    }
+
+    // =====================
+    // HEADERS SAFE PARSING
+    // =====================
+    let parsedHeaders = {};
+
+    if (headers) {
+      try {
+        parsedHeaders =
+          typeof headers === 'string'
+            ? JSON.parse(headers)
+            : headers;
+      } catch (err) {
+        return res.status(400).json({
+          error: 'Invalid headers JSON',
+          details: err.message
+        });
+      }
+    }
+
+    // =====================
+    // LOG REQUEST (Render logs)
+    // =====================
+    console.log('📤 Incoming Proxy Request');
+    console.log('Instance:', instanceUrl);
+    console.log('Endpoint:', endpoint);
+    console.log('Method:', method);
+
+    // =====================
+    // CALL SALESFORCE
+    // =====================
     const response = await axios({
-      method: 'POST',
-      url: TARGET_URL,
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      },
-      data: req.body,
+      method: method,
+      url: `${instanceUrl}${endpoint}`,
+      headers: parsedHeaders,
+      data: body,
       timeout: 30000
     });
 
-    console.log('📤 Response from Salesforce:');
-    console.log(response.data);
+    // =====================
+    // SUCCESS LOG
+    // =====================
+    console.log('✅ Success:', response.status);
 
-    // ✅ Return response back to your Salesforce org
     return res.status(response.status).json(response.data);
 
   } catch (error) {
 
     console.error('❌ Proxy Error:', error.message);
 
+    // =====================
+    // Salesforce/API ERROR
+    // =====================
     if (error.response) {
-      console.error('📛 Error response data:', error.response.data);
+      console.error('📥 Response Error:', error.response.status);
 
-      return res.status(error.response.status).json(error.response.data);
+      return res.status(error.response.status).json({
+        error: 'Salesforce/API Error',
+        status: error.response.status,
+        data: error.response.data
+      });
     }
 
+    // =====================
+    // NETWORK / UNKNOWN ERROR
+    // =====================
     return res.status(500).json({
       error: 'Proxy failed',
       message: error.message
@@ -56,13 +118,10 @@ app.post('/proxy', async (req, res) => {
   }
 });
 
-// 🌐 Health check
-app.get('/', (req, res) => {
-  res.send('Salesforce Proxy is running 🚀');
-});
-
-// 🚀 Start server
-const PORT = process.env.PORT || 3000;
+// =====================
+// START SERVER
+// =====================
+const PORT = process.env.PORT || 10000;
 
 app.listen(PORT, () => {
   console.log(`🚀 Proxy running on port ${PORT}`);
